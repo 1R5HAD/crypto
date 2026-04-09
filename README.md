@@ -1,8 +1,3 @@
-# Cryptography and Cyber Security – Lab Programs (2nd IA Part B)
-## BNMIT – 6th Sem | Sub Code: 23CSE162
-
----
-
 ## Q1 A. BadStore's cart cookie – which field gives a discount?
 
 **Answer: Field 3 (the price field)**
