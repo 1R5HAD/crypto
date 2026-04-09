@@ -1,4 +1,8 @@
+# ..
+## ..
+
 ---
+
 ## Q1 A. BadStore's cart cookie – which field gives a discount?
 
 **Answer: Field 3 (the price field)**
