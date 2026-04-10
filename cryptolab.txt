@@ -1,0 +1,1211 @@
+================================================================================
+  CRYPTOGRAPHY AND CYBER SECURITY – LAB PROGRAMS (2nd IA PART B)
+  BNMIT | Department of CSE | 6th Sem | Sub Code: 23CSE162
+================================================================================
+
+================================================================================
+Q1 A. BadStore's Cart Cookie – Which field gives a discount?
+================================================================================
+
+ANSWER: Field 3 (the Price field)
+
+DETAILED STEPS:
+---------------
+1. Start the BadStore virtual machine and ensure it is accessible on your network.
+   Note down its IP address (e.g., 192.168.56.101).
+
+2. Open a browser (preferably Firefox) and navigate to:
+      http://192.168.56.101/
+
+3. Register or log in with any account credentials.
+
+4. Browse the store, click on any item, and add it to the cart using the
+   "Add to Cart" button.
+
+5. Once an item is in the cart, you need to read the cart cookie.
+   Go to the Search box on the BadStore homepage.
+
+6. In the search box, type the following XSS payload and press Enter:
+      <script>alert(document.cookie)</script>
+
+7. A browser alert dialog will pop up showing all active cookies.
+   You will see something like:
+      SSOid=abc123; CartID=1527258326%3A1%3A11.5%3A1000
+
+8. Copy the CartID value: 1527258326%3A1%3A11.5%3A1000
+
+9. URL-decode it using https://www.urldecoder.org
+   Paste the value and click Decode.
+   Result: 1527258326:1:11.5:1000
+
+10. Analyze the decoded cookie fields (separated by colons):
+      - Field 1: 1527258326  → Unix timestamp (when cart was created)
+      - Field 2: 1           → Quantity of item
+      - Field 3: 11.5        → Price of item  ← THIS IS THE TARGET
+      - Field 4: 1000        → Item ID
+
+11. To exploit: URL-encode a modified cookie where Field 3 is set to a
+    very small value, e.g., 0.01
+      Modified: 1527258326:1:0.01:1000
+      URL-encoded: 1527258326%3A1%3A0.01%3A1000
+
+12. Use browser developer tools (F12 → Application → Cookies) or a cookie
+    editor extension to set CartID to the modified value.
+
+13. Proceed to checkout — the price charged will now be the modified amount.
+
+ANSWER SUMMARY: Field 3 (price) is the field an attacker changes to get
+a discount.
+
+================================================================================
+Q1 B. Scapy – Create Ethernet + IP + TCP Frame and Show All Fields
+================================================================================
+
+SETUP (if Scapy is not installed):
+-----------------------------------
+   sudo apt update
+   sudo apt install python3-scapy -y
+   # OR
+   pip3 install scapy
+
+CODE (save as ethernet_ip_tcp.py):
+------------------------------------
+   from scapy.all import *
+
+   # Step 1: Create an IP layer (defaults: src=your IP, dst=127.0.0.1, TTL=64)
+   ip_layer = IP()
+
+   # Step 2: Create a TCP layer (defaults: sport=random, dport=80, flags=S)
+   tcp_layer = TCP()
+
+   # Step 3: Stack IP on top of TCP
+   ip_tcp_packet = ip_layer / tcp_layer
+
+   # Step 4: Wrap the IP/TCP packet inside an Ethernet frame
+   # Ether() defaults: dst=ff:ff:ff:ff:ff:ff, src=your MAC, type=0x0800(IPv4)
+   frame = Ether() / ip_tcp_packet
+
+   # Step 5: Display all fields of the complete frame
+   print("========== Full Frame Details ==========")
+   frame.show()
+
+   # Step 6: Optionally show a one-line summary
+   print("\n========== Summary ==========")
+   print(frame.summary())
+
+RUN:
+----
+   sudo python3 ethernet_ip_tcp.py
+
+EXPECTED OUTPUT (abbreviated):
+--------------------------------
+   ###[ Ethernet ]###
+     dst       = ff:ff:ff:ff:ff:ff
+     src       = 08:00:27:ab:cd:ef
+     type      = IPv4
+   ###[ IP ]###
+     version   = 4
+     ihl       = None
+     tos       = 0x0
+     len       = None
+     id        = 1
+     flags     =
+     frag      = 0
+     ttl       = 64
+     proto     = tcp
+     chksum    = None
+     src       = 127.0.0.1
+     dst       = 127.0.0.1
+   ###[ TCP ]###
+     sport     = ftp_data
+     dport     = http
+     seq       = 0
+     ack       = 0
+     dataofs   = None
+     reserved  = 0
+     flags     = S
+     window    = 8192
+     chksum    = None
+     urgptr    = 0
+
+================================================================================
+Q1 C. Shell Script for Port Scan using NetCat
+================================================================================
+
+SETUP (verify NetCat is installed):
+-------------------------------------
+   nc -h
+   # If not installed:
+   sudo apt install netcat-openbsd -y
+
+SCRIPT (save as port_scan.sh):
+--------------------------------
+   #!/bin/bash
+   # Port Scanner using NetCat
+   # Usage: ./port_scan.sh
+
+   # Target host (change as needed)
+   host="www.example.com"
+
+   # Prompt user for port range
+   read -p "Enter starting port: " start_port
+   read -p "Enter ending port: " end_port
+
+   echo ""
+   echo "Scanning $host from port $start_port to $end_port..."
+   echo "-------------------------------------------"
+
+   # Loop through each port in the range
+   for (( port=start_port; port<=end_port; port++ ))
+   do
+       # nc flags: -z = scan only (no data), -v = verbose, -w1 = 1s timeout
+       result=$(nc -zv -w1 "$host" "$port" 2>&1)
+
+       if echo "$result" | grep -q "succeeded\|open\|Connected"; then
+           echo "[OPEN]   Port $port"
+       else
+           echo "[CLOSED] Port $port"
+       fi
+   done
+
+   echo "-------------------------------------------"
+   echo "Scan complete."
+
+SAVE AND RUN:
+--------------
+   chmod +x port_scan.sh
+   ./port_scan.sh
+   # Enter: start=79, end=82 (to test ports around HTTP)
+
+FLAG REFERENCE:
+----------------
+   -z  : Zero-I/O mode — used for scanning, sends no data
+   -v  : Verbose — prints connection success/failure messages
+   -w1 : Timeout of 1 second per port (prevents hanging)
+   2>&1: Redirects stderr to stdout so we can capture the output
+
+================================================================================
+Q2 A. BadStore – Login as joe@supplier.com and Find Credit Card for $46.95
+================================================================================
+
+ANSWER: 4111 1111 1111 1111  OR  5500 0000 0000 0004
+
+DETAILED STEPS:
+----------------
+STEP 1 — Get admin credentials via SQL Injection:
+   1. Go to BadStore search box and type:
+         xx' IN (itemnum,sdesc,ldesc) UNION SELECT email,passwd,123,123 FROM userdb LIMIT 10 --
+   2. Results will show user emails and MD5 password hashes.
+   3. Note: admin@administrator.com has hash for password "secret".
+
+STEP 2 — Find joe@supplier.com's hash:
+   1. From the SQL injection results above, find:
+         joe@supplier.com | 62072d95acb588c7ee9d6fa0c6c85155
+   2. Go to https://md5.gromweb.com
+   3. Enter the hash: 62072d95acb588c7ee9d6fa0c6c85155
+   4. Result: Password = secret
+
+STEP 3 — Log in as joe@supplier.com:
+   1. Go to BadStore → Login/Register (NOT "Supplier Login").
+   2. Enter:
+         Email: joe@supplier.com
+         Password: secret
+   3. Click "Login". You are now logged in as joe.
+
+STEP 4 — View order history:
+   1. Click "My Account" or "View Previous Orders".
+   2. A table of previous purchases appears.
+   3. Use Ctrl+F in the browser, search for: 46.95
+   4. Find the row with $46.95 and note the credit card number used.
+
+ANSWER:
+   - 4111 1111 1111 1111 (Visa test card)
+   - 5500 0000 0000 0004 (MasterCard test card)
+   Both are acceptable answers.
+
+================================================================================
+Q2 B. Scapy – Sniff 10 Packets and Show Details
+================================================================================
+
+CODE (save as sniff_packets.py):
+----------------------------------
+   from scapy.all import *
+
+   print("Starting packet capture... (waiting for 10 packets)")
+
+   # sniff() captures 'count' number of packets from the network interface
+   # iface parameter is optional; leave blank for default interface
+   packets = sniff(count=10)
+
+   print(f"\nCaptured {len(packets)} packets.")
+
+   # Show a one-line summary of all packets
+   print("\n========== Summary of All Packets ==========")
+   packets.summary()
+
+   # Show full layer-by-layer details of each packet
+   print("\n========== Full Details of Each Packet ==========")
+   for i, pkt in enumerate(packets):
+       print(f"\n--- Packet {i+1} ---")
+       pkt.show()       # prints all fields of all layers
+       print("-" * 40)
+
+RUN:
+----
+   sudo python3 sniff_packets.py
+
+NOTE: Run this while generating traffic (e.g., open a browser or ping)
+to populate the 10 packets quickly.
+
+================================================================================
+Q2 C. NetCat – Communicate Using 2 Terminals (Same Machine & Across Systems)
+================================================================================
+
+--- SAME MACHINE ---
+
+Terminal 1 (Server – listens for connection):
+   nc -vlp 1234
+   # -v = verbose, -l = listen mode, -p = port number
+
+Terminal 2 (Client – connects to server):
+   nc localhost 1234
+   # OR: nc 127.0.0.1 1234
+
+After connection is established:
+   - Type any message in Terminal 1 → it appears in Terminal 2
+   - Type any message in Terminal 2 → it appears in Terminal 1
+   - Press Ctrl+C to terminate either side
+
+--- ACROSS TWO DIFFERENT MACHINES ---
+
+Machine A (Server) – find its IP first:
+   ip addr show     # or: ifconfig
+   # Note the IP, e.g., 192.168.1.10
+
+Machine A starts listener:
+   nc -vlp 1234
+
+Machine B (Client) – connects to Machine A:
+   nc 192.168.1.10 1234
+
+Type messages from either terminal to communicate bidirectionally.
+
+NOTE: Ensure the firewall allows port 1234:
+   sudo ufw allow 1234    # on Machine A if ufw is active
+
+================================================================================
+Q3 A. Scapy – Perform Traceroute
+================================================================================
+
+CODE (save as traceroute_demo.py):
+------------------------------------
+   from scapy.all import *
+
+   print("Performing traceroute to www.example.com and www.google.com...")
+   print("This may take a few seconds...\n")
+
+   # traceroute() sends packets with increasing TTL (1 to maxttl)
+   # Each router decrements TTL and returns ICMP TTL Exceeded when TTL=0
+   # This reveals each hop along the path
+   result, unanswered = traceroute(
+       ["www.example.com", "www.google.com"],
+       maxttl=20,    # Maximum number of hops to try
+       verbose=1     # Set to 0 to suppress raw output
+   )
+
+   # Display the structured result table
+   print("\n========== Traceroute Results ==========")
+   result.show()
+
+   # Optionally save a visual graph (requires matplotlib + graphviz)
+   # result.graph()
+
+RUN:
+----
+   sudo python3 traceroute_demo.py
+
+WHAT THE OUTPUT SHOWS:
+------------------------
+   - Each row = one TTL hop
+   - Columns: TTL | Destination | Responding IP | Response Type
+   - Helps identify network path, number of hops, and any dropped packets
+
+================================================================================
+Q3 B. NetCat – HTTP GET and HEAD Requests
+================================================================================
+
+--- HTTP GET REQUEST ---
+
+Step 1: Connect to the web server on port 80:
+   nc example.com 80
+
+Step 2: Once connected, type the following (then press Enter TWICE):
+   GET / HTTP/1.1
+   Host: example.com
+   [blank line here — press Enter again]
+
+Step 3: Server responds with:
+   - HTTP status line (e.g., HTTP/1.1 200 OK)
+   - Response headers (Content-Type, Content-Length, etc.)
+   - Full HTML body of the page
+
+--- HTTP HEAD REQUEST ---
+
+Step 1: Connect again:
+   nc example.com 80
+
+Step 2: Type (press Enter TWICE after Host line):
+   HEAD / HTTP/1.1
+   Host: example.com
+   [blank line]
+
+Step 3: Server responds with:
+   - HTTP status line
+   - Response headers ONLY
+   - NO body/HTML content
+
+DIFFERENCE:
+   GET  → Returns headers + full response body (HTML)
+   HEAD → Returns headers only (useful to check server type, content-length, etc.)
+
+================================================================================
+Q3 C. Nmap – Ping Scan and Scan a Single IP
+================================================================================
+
+SETUP (verify Nmap is installed):
+-----------------------------------
+   nmap --version
+   # If not installed:
+   sudo apt install nmap -y
+
+--- PING SCAN (host discovery only) ---
+
+Scan a single host:
+   nmap -sn www.google.com
+
+Scan an entire subnet:
+   nmap -sn 192.168.1.0/24
+
+What it does:
+   - Sends ICMP Echo + TCP SYN to port 443 + TCP ACK to port 80 + ICMP Timestamp
+   - Reports which hosts responded (are "up")
+   - Does NOT scan any ports
+   - Much faster than a full port scan
+   -sn flag = "Skip port scan" (previously called -sP)
+
+--- SCAN A SINGLE IP ---
+
+   nmap 192.168.56.1
+
+What it does:
+   - Performs a default SYN scan on the top 1000 most common ports
+   - Reports open, closed, or filtered ports
+   - Shows service names associated with each port
+
+SAMPLE OUTPUT:
+   PORT     STATE  SERVICE
+   22/tcp   open   ssh
+   80/tcp   open   http
+   443/tcp  open   https
+   3306/tcp open   mysql
+
+================================================================================
+Q4 A. Scapy – Network Scanner using ARP
+================================================================================
+
+HOW ARP SCANNING WORKS:
+-------------------------
+ARP (Address Resolution Protocol) is used to discover the MAC address for a
+given IP. By broadcasting ARP requests to an entire subnet, we can identify
+which IP addresses have active hosts responding.
+
+CODE (save as network_scanner.py):
+------------------------------------
+   import scapy.all as scapy
+
+   # Step 1: Define the target subnet (use 'ip addr' or 'ifconfig' to find yours)
+   target_subnet = "192.168.1.0/24"   # Change to match your local network
+
+   # Step 2: Create an ARP request packet
+   arp_request = scapy.ARP()
+   arp_request.pdst = target_subnet   # Set destination IP range
+
+   # Step 3: Create a broadcast Ethernet frame
+   # ff:ff:ff:ff:ff:ff = broadcast MAC (sent to ALL devices on the LAN)
+   broadcast_frame = scapy.Ether()
+   broadcast_frame.dst = "ff:ff:ff:ff:ff:ff"
+
+   # Step 4: Combine Ethernet broadcast + ARP request
+   combined_packet = broadcast_frame / arp_request
+
+   # Step 5: Send packet and capture responses
+   # srp() = send and receive at Layer 2
+   # timeout=1 → wait up to 1 second for replies
+   answered, unanswered = scapy.srp(combined_packet, timeout=1, verbose=False)
+
+   # Step 6: Print discovered hosts
+   print(f"{'IP Address':<20} {'MAC Address'}")
+   print("-" * 40)
+   for sent_packet, received_packet in answered:
+       ip  = received_packet.psrc    # Source IP from ARP reply
+       mac = received_packet.hwsrc   # Source MAC from ARP reply
+       print(f"{ip:<20} {mac}")
+
+   print(f"\nTotal hosts found: {len(answered)}")
+
+RUN:
+----
+   sudo python3 network_scanner.py
+
+================================================================================
+Q4 B. NetCat – Browser-to-Server Communication (Plain Text)
+================================================================================
+
+HOW IT WORKS:
+--------------
+NetCat acts as a raw TCP server. A browser connecting to it sends an HTTP
+request that NetCat displays. We then manually type an HTTP response that
+the browser displays as a webpage.
+
+STEP-BY-STEP:
+--------------
+Step 1: Start NetCat as a listener on port 5000:
+   nc -l -p 5000
+   # -l = listen mode, -p = specify port
+
+Step 2: Open a web browser and go to:
+   http://localhost:5000/
+
+Step 3: The browser's HTTP request now appears in the NetCat terminal:
+   GET / HTTP/1.1
+   Host: localhost:5000
+   User-Agent: Mozilla/5.0 ...
+   Accept: text/html,...
+   Connection: keep-alive
+
+Step 4: In the NetCat terminal, type a valid HTTP response:
+   HTTP/1.1 200 OK
+   Content-Type: text/html; charset=UTF-8
+
+   <html>
+   <body>
+   <h1>Hello from NetCat!</h1>
+   <p>This page is served by NetCat, not a web server.</p>
+   </body>
+   </html>
+
+Step 5: Press Enter twice after the last HTML line.
+   The browser will display the HTML page.
+
+NOTE: After responding, the connection closes. To serve again, restart nc.
+
+================================================================================
+Q4 C. Nmap – Scan a Range of IPs and an Entire Subnet
+================================================================================
+
+--- SCAN A RANGE OF IPs ---
+
+Hyphen range (e.g., IPs from .100 to .120):
+   nmap 192.168.1.100-120
+
+Multiple specific IPs:
+   nmap 192.168.1.5 192.168.1.10 192.168.1.15
+
+--- SCAN AN ENTIRE SUBNET (/24 = 256 IPs) ---
+
+   nmap 192.168.1.0/24
+
+What it scans:
+   192.168.1.0 through 192.168.1.255 (256 hosts)
+
+For faster subnet scan (ping scan first, then port scan only live hosts):
+   nmap -sn 192.168.1.0/24    # First: find live hosts
+   nmap 192.168.1.0/24        # Then: full default scan
+
+SAMPLE OUTPUT (single host):
+   Nmap scan report for 192.168.1.1
+   Host is up (0.0023s latency).
+   PORT   STATE SERVICE
+   22/tcp open  ssh
+   80/tcp open  http
+
+================================================================================
+Q5 A. BadStore – Key of the Cart Cookie
+================================================================================
+
+ANSWER: CartID
+
+STEPS:
+-------
+1. Open BadStore in Firefox and add any item to the cart.
+2. In the search box, type:
+      <script>alert(document.cookie)</script>
+3. Press Enter. An alert popup appears showing:
+      SSOid=abc123xyz; CartID=1527258326%3A1%3A11.5%3A1000
+4. Two cookies are visible:
+      - SSOid   → Session authentication cookie (login token)
+      - CartID  → Shopping cart cookie
+
+ANSWER: The key of the cart cookie is CartID.
+
+================================================================================
+Q5 B. Shell Script for Port Scan using NetCat (same as Q1C)
+================================================================================
+
+   #!/bin/bash
+   host="www.example.com"
+   read -p "Enter starting port: " start_port
+   read -p "Enter ending port: " end_port
+
+   echo "Scanning $host from port $start_port to $end_port..."
+
+   for (( port=start_port; port<=end_port; port++ ))
+   do
+       result=$(nc -zv -w1 "$host" "$port" 2>&1)
+       if echo "$result" | grep -q "succeeded\|open\|Connected"; then
+           echo "[OPEN]   Port $port"
+       else
+           echo "[CLOSED] Port $port"
+       fi
+   done
+
+   echo "Scan complete."
+
+RUN:
+   chmod +x port_scan.sh
+   ./port_scan.sh
+
+================================================================================
+Q5 C / Q9 C (Nmap). Scan Top 1000 Ports and Detect Service Version
+================================================================================
+
+--- SCAN TOP 1000 PORTS (Default Scan) ---
+
+   nmap 192.168.56.1
+   nmap www.bnmit.org
+
+Nmap scans the top 1000 most commonly used ports by default.
+No flag needed — this is the standard scan mode.
+
+--- DETECT SERVICE VERSION ---
+
+   nmap -sV 192.168.56.1
+   nmap -sV www.bnmit.org
+
+What -sV does:
+   - Sends additional probes after finding open ports
+   - Identifies the exact software and version running on each port
+   - Useful for finding outdated/vulnerable software versions
+
+SAMPLE OUTPUT with -sV:
+   PORT    STATE SERVICE  VERSION
+   22/tcp  open  ssh      OpenSSH 8.2p1 Ubuntu
+   80/tcp  open  http     Apache httpd 2.4.51
+   443/tcp open  ssl/http nginx 1.18.0
+   3306/tcp open mysql    MySQL 8.0.26
+
+================================================================================
+Q6 A. BadStore – Key of the Cart Cookie (repeat — see Q5 A)
+================================================================================
+
+ANSWER: CartID
+
+(Follow the same XSS cookie extraction steps as Q5 A above.)
+
+================================================================================
+Q6 B. Nmap – OS Detection and Aggressive Scan
+================================================================================
+
+--- OS DETECTION ---
+
+   sudo nmap -O 192.168.56.1
+   sudo nmap -O bnmit.org
+
+How -O works:
+   - Sends a series of specially crafted TCP/UDP/ICMP probes
+   - Analyzes responses (TTL values, window sizes, TCP options) to fingerprint the OS
+   - Matches against a database of known OS fingerprints (nmap-os-db)
+   - Requires at least one open AND one closed TCP port to make a good guess
+
+SAMPLE OUTPUT:
+   OS details: Linux 4.15 - 5.8
+   Running: Linux 5.X
+   OS CPE: cpe:/o:linux:linux_kernel:5
+
+--- AGGRESSIVE SCAN ---
+
+   sudo nmap -A 192.168.56.1
+   sudo nmap -A google.com
+
+The -A flag combines:
+   -sV  : Service version detection
+   -O   : OS detection
+   --script=default : Runs default NSE (Nmap Scripting Engine) scripts
+   --traceroute     : Traces network path to the target
+
+SAMPLE OUTPUT (abbreviated):
+   PORT   STATE SERVICE VERSION
+   22/tcp open  ssh     OpenSSH 8.2p1
+   | ssh-hostkey:
+   |   3072 ab:cd:ef:... (RSA)
+   80/tcp open  http    Apache httpd 2.4.51
+   |_http-title: Welcome to BadStore
+   OS: Linux 5.4 (Ubuntu)
+   TRACEROUTE: 3 hops
+
+================================================================================
+Q6 C. BadStore – Hidden Form Field Name for User Privilege Level
+================================================================================
+
+ANSWER: The hidden field name is: passwd  (or "password" in some versions)
+
+DETAILED STEPS:
+----------------
+1. First get admin access. Use SQL injection in the search box:
+      xx' IN (itemnum,sdesc,ldesc) UNION SELECT email,passwd,123,123 FROM userdb --
+
+2. Find admin@administrator.com's hash → reverse it → password is: secret
+
+3. Navigate to:
+      http://192.168.56.101/cgi-bin/badstore.cgi?action=login
+   Log in as admin@administrator.com / secret
+
+4. Go to the admin portal:
+      http://192.168.56.101/cgi-bin/badstore.cgi?action=adminportal
+
+5. Look for "Add User" or "Register" form.
+
+6. Right-click on the page → View Page Source (Ctrl+U)
+
+7. Press Ctrl+F and search for: hidden
+
+8. You will find a line like:
+      <INPUT TYPE="hidden" NAME="passwd" VALUE="9">
+
+   (The value "9" typically represents admin privilege level)
+
+ANSWER: The hidden form field name is passwd (controls privilege level).
+
+================================================================================
+Q7 A. Scapy – Send ICMP Packet to 8.8.8.8 and Capture in Wireshark
+================================================================================
+
+CODE (save as icmp_send.py):
+------------------------------
+   from scapy.all import *
+
+   # Step 1: Build an IP packet with Google's DNS server as destination
+   # ICMP() defaults to type=8 (Echo Request) and code=0
+   packet = IP(dst="8.8.8.8") / ICMP()
+
+   # Step 2: Display what we're about to send
+   print("Packet to be sent:")
+   packet.show()
+
+   # Step 3: Send the packet (Layer 3 — no Ethernet header needed)
+   send(packet)
+   print("\nICMP Echo Request sent to 8.8.8.8")
+
+   # Step 4: Alternatively, send and wait for reply
+   reply = sr1(packet, timeout=2, verbose=0)
+   if reply:
+       print("\nReply received:")
+       reply.show()
+   else:
+       print("No reply received (may be filtered).")
+
+RUN:
+----
+   sudo python3 icmp_send.py
+
+WIRESHARK STEPS:
+-----------------
+1. Open Wireshark (Applications → Internet → Wireshark, or: sudo wireshark)
+2. Select your active network interface (e.g., eth0, enp0s3, wlan0)
+3. In the filter bar at the top, type:
+      icmp
+   and press Enter.
+4. Click the blue shark fin button (Start Capture) or press Ctrl+E.
+5. In a separate terminal, run:
+      sudo python3 icmp_send.py
+6. In Wireshark, you will see:
+      - ICMP Echo Request from your IP → 8.8.8.8 (type=8)
+      - ICMP Echo Reply from 8.8.8.8 → your IP (type=0)
+7. Click on a packet row to expand and inspect all layers.
+
+================================================================================
+Q7 B. NetCat – Browser-to-Server Communication (Image)
+================================================================================
+
+HOW IT WORKS:
+--------------
+A browser expects proper HTTP headers before binary content. We use a bash
+script to send the image with the correct Content-Type and Content-Length.
+
+STEP-BY-STEP:
+--------------
+Step 1: Place any JPEG image in your current directory and name it image.jpg
+   # If you need to create/find one:
+   cp /usr/share/pixmaps/debian-logo.png ./image.jpg
+
+Step 2: Create a bash script (save as serve_image.sh):
+
+   #!/bin/bash
+   IMGFILE="image.jpg"
+
+   # Get the byte size of the image file
+   IMGSIZE=$(wc -c < "$IMGFILE")
+
+   echo "Serving $IMGFILE ($IMGSIZE bytes) on port 8080..."
+   echo "Open browser and go to: http://localhost:8080"
+
+   # Send headers + binary image data through NetCat
+   {
+     printf "HTTP/1.1 200 OK\r\n"
+     printf "Content-Type: image/jpeg\r\n"
+     printf "Content-Length: $IMGSIZE\r\n"
+     printf "Connection: close\r\n"
+     printf "\r\n"
+     cat "$IMGFILE"
+   } | nc -l -p 8080
+
+Step 3: Make it executable and run:
+   chmod +x serve_image.sh
+   ./serve_image.sh
+
+Step 4: Open browser → http://localhost:8080
+   The JPEG image should display in the browser.
+
+NOTE: After each request, nc closes the connection. Re-run the script
+to serve again. For a PNG image, change Content-Type to image/png.
+
+================================================================================
+Q7 C. BadStore – How Many Items in the Database? (SQL Injection)
+================================================================================
+
+ANSWER: 16 items
+
+DETAILED STEPS:
+----------------
+Step 1: Understanding the database structure.
+   First, deliberately trigger an error by searching for a single quote:
+      '
+   BadStore reveals its SQL query:
+      SELECT itemnum, sdesc, ldesc, price FROM itemdb WHERE '' IN (itemnum,sdesc,ldesc)
+
+Step 2: Note the table has 4 columns (itemnum, sdesc, ldesc, price).
+   For UNION injection, we need exactly 4 columns in our injected query.
+
+Step 3: Use COUNT() in a UNION SELECT to count rows:
+   In the search box, type:
+      x' UNION SELECT count(itemnum),count(itemnum),count(itemnum),count(itemnum) FROM itemdb -- 
+   (Note the space after --)
+
+Step 4: Alternatively, use the URL directly:
+   http://192.168.56.101/cgi-bin/badstore.cgi?searchquery=x'+UNION+SELECT+count(itemnum),count(itemnum),count(itemnum),count(itemnum)+FROM+itemdb+--+&action=search&x=11&y=9
+
+Step 5: The result page will show: 16
+
+ANSWER: There are 16 items in BadStore's database.
+
+================================================================================
+Q8 A. Scapy – Perform a Port Scan on www.example.com
+================================================================================
+
+HOW SYN SCANNING WORKS:
+-------------------------
+A SYN scan (half-open scan) sends a TCP SYN packet to a port:
+   - If port is OPEN   → target responds with SYN-ACK (flags: SA)
+   - If port is CLOSED → target responds with RST-ACK (flags: RA)
+   - If FILTERED       → no response (firewall drops the packet)
+
+CODE (save as port_scan_scapy.py):
+------------------------------------
+   from scapy.all import *
+   import socket
+
+   # Step 1: Resolve the domain to an IP address
+   target_host = "www.example.com"
+   try:
+       target_ip = socket.gethostbyname(target_host)
+       print(f"Target: {target_host} ({target_ip})")
+   except socket.gaierror:
+       print("Could not resolve hostname.")
+       exit()
+
+   # Step 2: Define list of ports to scan
+   ports = [21, 22, 23, 25, 80, 443, 8080, 8443]
+
+   print(f"\n{'PORT':<10} {'STATE':<12} {'SERVICE'}")
+   print("-" * 35)
+
+   # Step 3: Scan each port
+   for port in ports:
+       # Build SYN packet: IP layer + TCP with SYN flag
+       pkt = IP(dst=target_ip) / TCP(dport=port, flags="S")
+
+       # Send packet and wait for reply (timeout=1 second)
+       response = sr1(pkt, timeout=1, verbose=0)
+
+       if response is None:
+           state = "FILTERED"
+       elif response.haslayer(TCP):
+           if response[TCP].flags == 0x12:   # SYN-ACK = 0x12 = 18
+               state = "OPEN"
+               # Send RST to close the half-open connection gracefully
+               rst = IP(dst=target_ip) / TCP(dport=port, flags="R")
+               send(rst, verbose=0)
+           elif response[TCP].flags == 0x14:  # RST-ACK = 0x14 = 20
+               state = "CLOSED"
+           else:
+               state = "UNKNOWN"
+       else:
+           state = "FILTERED"
+
+       print(f"{port:<10} {state:<12}")
+
+RUN:
+----
+   sudo python3 port_scan_scapy.py
+
+================================================================================
+Q8 B. Nmap – Scan for Vulnerabilities and Save Results to File
+================================================================================
+
+--- VULNERABILITY SCAN ---
+
+   sudo nmap --script vuln 192.168.56.1
+   sudo nmap --script vuln google.com
+
+What it checks (using NSE scripts):
+   - CVE-based vulnerabilities (Heartbleed, EternalBlue, POODLE, etc.)
+   - SSL/TLS misconfigurations
+   - Open redirect and CSRF vulnerabilities
+   - Default credentials on services
+   - Outdated software with known exploits
+
+SAMPLE OUTPUT:
+   PORT   STATE SERVICE
+   80/tcp open  http
+   | http-csrf:
+   |   CSRF vulnerability in /cgi-bin/badstore.cgi
+   |_  Affected parameter: action
+   443/tcp open  https
+   | ssl-heartbleed:
+   |_  VULNERABLE: Heartbleed
+
+--- SAVE RESULTS TO FILE ---
+
+Normal text output:
+   nmap -oN scan_results.txt 192.168.56.1
+
+Combined: vulnerability scan + save:
+   sudo nmap --script vuln -oN vuln_results.txt 192.168.56.1
+
+Other output formats:
+   -oX output.xml   → XML format (for importing into other tools)
+   -oG output.gnmap → Grepable format (easy to parse with grep/awk)
+   -oA output       → All formats at once (creates .nmap, .xml, .gnmap)
+
+View saved file:
+   cat vuln_results.txt
+
+================================================================================
+Q8 C. BadStore – What Can Suppliers Do in the "Suppliers Only" Area?
+================================================================================
+
+ANSWER: Suppliers can Upload Price Lists.
+
+DETAILED STEPS:
+----------------
+Step 1: Extract user credentials using SQL Injection.
+   In the search box, type:
+      xx' IN (itemnum,sdesc,ldesc) UNION SELECT email,passwd,fullname,role FROM userdb LIMIT 10 --
+
+Step 2: In the results, find the row with role = S (Supplier):
+      joe@supplier.com | 62072d95acb588c7ee9d6fa0c6c85155 | Joe Supplier | S
+
+Step 3: Crack the MD5 hash.
+   Go to https://md5.gromweb.com
+   Enter: 62072d95acb588c7ee9d6fa0c6c85155
+   Result: secret
+
+Step 4: Log in as supplier (use Login/Register form, NOT "Supplier Login"):
+   Email:    joe@supplier.com
+   Password: secret
+
+Step 5: After login, you are redirected to the Supplier Portal:
+   http://192.168.56.101/cgi-bin/badstore.cgi?action=supplierportal
+
+Step 6: The Supplier Portal shows an option to:
+   "Upload Price List" (file upload form)
+
+ANSWER: Suppliers can upload price lists in the Supplier Portal.
+SECURITY NOTE: This file upload could be exploited to upload malicious files.
+
+================================================================================
+Q9 A. Scapy – ICMP Packet Monitor using Callback Function
+================================================================================
+
+HOW CALLBACKS WORK IN SCAPY:
+------------------------------
+The sniff() function accepts a prn parameter (short for "print/process").
+This is a callback function automatically called for each matching packet.
+Using filter="icmp" ensures only ICMP packets trigger the callback.
+
+CODE (save as icmp_monitor.py):
+---------------------------------
+   from scapy.all import *
+
+   # Step 1: Define the callback function
+   # This function is called automatically for every captured ICMP packet
+   def packet_callback(packet):
+       # Ensure the packet has an IP layer before accessing IP fields
+       if packet.haslayer(IP):
+           src_ip = packet[IP].src
+           dst_ip = packet[IP].dst
+
+           if packet.haslayer(ICMP):
+               icmp_type = packet[ICMP].type
+               # ICMP type 8 = Echo Request (ping sent)
+               # ICMP type 0 = Echo Reply  (ping response)
+               type_name = "Echo Request" if icmp_type == 8 else \
+                           "Echo Reply"   if icmp_type == 0 else \
+                           f"Type {icmp_type}"
+
+               print(f"[ICMP] {src_ip} → {dst_ip} | {type_name}")
+
+   # Step 2: Start sniffing with the callback
+   # filter="icmp"  → Berkeley Packet Filter (BPF) to capture only ICMP
+   # store=0        → Don't store packets in RAM (saves memory for long runs)
+   # prn=...        → Callback function for each packet
+   print("ICMP Monitor started. Press Ctrl+C to stop.")
+   print("Run 'ping 8.8.8.8' in another terminal to test.\n")
+
+   sniff(filter="icmp", prn=packet_callback, store=0)
+
+RUN:
+----
+Terminal 1:
+   sudo python3 icmp_monitor.py
+
+Terminal 2 (to generate ICMP traffic):
+   ping 8.8.8.8
+
+EXPECTED OUTPUT:
+   [ICMP] 192.168.1.5 → 8.8.8.8     | Echo Request
+   [ICMP] 8.8.8.8     → 192.168.1.5 | Echo Reply
+   [ICMP] 192.168.1.5 → 8.8.8.8     | Echo Request
+   ...
+
+================================================================================
+Q9 B. Nmap – Scan a Range of IPs and an Entire Subnet (same as Q4 C)
+================================================================================
+
+--- SCAN A RANGE ---
+
+   nmap 192.168.1.100-120     # Scans IPs .100 through .120
+   nmap 192.168.1.5,10,15     # Scans specific IPs .5, .10, .15
+
+--- SCAN ENTIRE SUBNET ---
+
+   nmap 192.168.1.0/24        # Scans all 256 IPs (.0 to .255)
+
+--- FASTER SUBNET SCAN ---
+
+   nmap -sn 192.168.1.0/24    # Ping scan first (find live hosts)
+   nmap -T4 192.168.1.0/24    # Use timing template 4 (aggressive speed)
+
+================================================================================
+Q9 C. BadStore – Login as joe@supplier.com for Credit Card (same as Q2 A)
+================================================================================
+
+ANSWER: 4111 1111 1111 1111  OR  5500 0000 0000 0004
+
+(Refer to Q2 A above for complete step-by-step instructions.)
+
+================================================================================
+Q10 A. Scapy – Identify Hosts Up in Local Network using ARP
+================================================================================
+
+CODE (save as arp_host_discover.py):
+--------------------------------------
+   from scapy.all import *
+
+   # Step 1: Define the subnet to scan
+   # Find your subnet with: ip addr show
+   # Example: if your IP is 192.168.1.50/24, subnet is 192.168.1.0/24
+   target_subnet = "192.168.1.0/24"
+
+   print(f"Scanning {target_subnet} for live hosts...")
+   print("This may take a few seconds...\n")
+
+   # Step 2: Craft Ethernet broadcast + ARP Request
+   # Ether(dst="ff:ff:ff:ff:ff:ff") = send to ALL devices on LAN
+   # ARP(pdst=...) = asking "Who has this IP? Tell me your MAC."
+   arp_request = Ether(dst="ff:ff:ff:ff:ff:ff") / ARP(pdst=target_subnet)
+
+   # Step 3: Send at Layer 2 and capture responses
+   # srp() = send + receive, works at Ethernet level
+   # timeout=2 → wait up to 2 seconds for all replies
+   # verbose=False → suppress Scapy's default output
+   answered, unanswered = srp(arp_request, timeout=2, verbose=False)
+
+   # Step 4: Display all hosts that replied
+   print(f"{'Host IP':<20} {'MAC Address'}")
+   print("=" * 40)
+   for sent, received in answered:
+       print(f"{received.psrc:<20} {received.hwsrc}")
+
+   print(f"\nTotal live hosts found: {len(answered)}")
+   print(f"Non-responding IPs:    {len(unanswered)}")
+
+RUN:
+----
+   sudo python3 arp_host_discover.py
+
+SAMPLE OUTPUT:
+   Host IP              MAC Address
+   ========================================
+   192.168.1.1          aa:bb:cc:dd:ee:ff   ← Gateway/Router
+   192.168.1.5          11:22:33:44:55:66
+   192.168.1.10         77:88:99:aa:bb:cc
+   Total live hosts found: 3
+
+================================================================================
+Q10 B. Nmap – Scan Top 1000 Ports and Detect Service Version (see Q5 C)
+================================================================================
+
+Top 1000 Ports (default):
+   nmap 192.168.1.1
+   nmap bnmit.org
+
+Service Version Detection:
+   nmap -sV 192.168.56.1
+   nmap -sV bnmit.org
+
+(Full explanation in Q5 C above.)
+
+================================================================================
+Q10 C. BadStore – Find the Two @whole.biz Users
+================================================================================
+
+ANSWER: fred  and  landon
+
+DETAILED STEPS:
+----------------
+Step 1: Log in as admin.
+   Use SQL injection to extract admin credentials (as in Q2 A, Q6 C).
+   Admin email: admin@administrator.com | Password: secret
+
+Step 2: Navigate to the Admin Portal:
+   http://192.168.56.101/cgi-bin/badstore.cgi?action=adminportal
+
+Step 3: The Admin Portal shows a full list of all registered users
+   in a table with columns: Email, Name, Role, etc.
+
+Step 4: Press Ctrl+F in the browser.
+   Search for: whole.biz
+
+Step 5: Two entries will be highlighted:
+   fred@whole.biz    → Username prefix: fred
+   landon@whole.biz  → Username prefix: landon
+
+ANSWER: fred and landon
+(Answer is case-sensitive.)
+
+================================================================================
+Q10 C (Alt). BadStore – Key of the Session Cookie
+================================================================================
+
+ANSWER: SSOid
+
+STEPS:
+-------
+1. Log in to BadStore with any account.
+2. In the search box, type:
+      <script>alert(document.cookie)</script>
+3. The alert box shows:
+      SSOid=abc123xyz; CartID=1527258326%3A1%3A11.5%3A1000
+
+COOKIE MEANINGS:
+   SSOid  → Single Sign-On ID = Session cookie (set after login, used
+             to maintain authentication across pages)
+   CartID → Shopping cart cookie (tracks items in cart)
+
+ANSWER: The key of the session cookie is SSOid.
+
+================================================================================
+Q11 A. Scapy – Traceroute on www.example.com and www.google.com (see Q3 A)
+================================================================================
+
+CODE (save as traceroute_both.py):
+------------------------------------
+   from scapy.all import *
+
+   print("Tracerouting to www.example.com and www.google.com...")
+   result, unanswered = traceroute(
+       ["www.example.com", "www.google.com"],
+       maxttl=20,
+       verbose=1
+   )
+   result.show()
+
+RUN:
+----
+   sudo python3 traceroute_both.py
+
+(Full explanation in Q3 A above.)
+
+================================================================================
+Q11 B / Q12 B. NetCat – Browser-to-Server Communication (Image) (see Q7 B)
+================================================================================
+
+(Full step-by-step instructions in Q7 B above.)
+
+Quick reference:
+   IMGSIZE=$(wc -c < image.jpg)
+   { printf "HTTP/1.1 200 OK\r\n"; printf "Content-Type: image/jpeg\r\n";
+     printf "Content-Length: $IMGSIZE\r\n"; printf "\r\n"; cat image.jpg;
+   } | nc -l -p 8080
+   # Open browser → http://localhost:8080
+
+================================================================================
+Q12 A. Scapy – Display Route and Measure Transit Delays (Traceroute)
+================================================================================
+
+(Same as Q3 A / Q11 A — Traceroute to www.example.com and www.google.com)
+
+CODE (save as traceroute_delay.py):
+-------------------------------------
+   from scapy.all import *
+
+   # traceroute() works by sending UDP or ICMP packets with TTL starting at 1
+   # Each router decrements TTL; when TTL=0, it sends ICMP TTL Exceeded back
+   # By recording which router responds at each TTL, we reconstruct the path
+   # RTT (Round Trip Time) for each hop shows transit delay
+
+   targets = ["www.example.com", "www.google.com"]
+   print(f"Tracerouting to: {targets}\n")
+
+   result, unanswered = traceroute(targets, maxttl=20, verbose=1)
+
+   print("\n===== Route and Delay Summary =====")
+   result.show()
+
+RUN:
+----
+   sudo python3 traceroute_delay.py
+
+================================================================================
+Q12 C. BadStore – Key of the Cart Cookie (repeat — see Q5 A)
+================================================================================
+
+ANSWER: CartID
+
+(Follow XSS cookie extraction steps from Q5 A.)
+
+================================================================================
+                     END OF LAB PROGRAMS – CCS 23CSE162
+          BNMIT | 6th Sem | Department of Computer Science and Engineering
+================================================================================
